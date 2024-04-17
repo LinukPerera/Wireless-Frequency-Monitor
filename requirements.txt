@@ -153,7 +153,7 @@ python-utils==3.7.0
 python3-midi==0.2.5
 pytz==2023.3
 pytz-deprecation-shim==0.1.0.post0
-pywin32==306
+
 pywinpty==2.0.10
 PyYAML==6.0
 pyzmq==25.1.0
