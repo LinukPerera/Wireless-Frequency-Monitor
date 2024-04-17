@@ -215,5 +215,5 @@ Werkzeug==2.3.6
 widgetsnbextension==4.0.8
 wrapt==1.14.1
 yarg==0.1.9
-youtube-dl==2021.12.17
+
 zipp==3.16.2
