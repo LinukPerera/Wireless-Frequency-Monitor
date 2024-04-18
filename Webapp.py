@@ -171,7 +171,7 @@ with right_column:
 st.write("---")
 st.header("To contact the development team use the below Submission Portal")
 st.write("Fill all 3 boxes")
-form = """<form action="https://formsubmit.co/linukperera402gmail.com" method="POST">
+form = """<form action="https://formsubmit.co/linukperera402@gmail.com" method="POST">
     <input type = "hidden" name="_captcha" value="false">
      <input type="text" name="name" placeholder = "Your Name" required>
      <input type="email" name="email" placeholder = "Your Email" required>
