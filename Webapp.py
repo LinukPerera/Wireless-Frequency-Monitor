@@ -1,187 +1,215 @@
+#python3 -m streamlit run sto.py
+
 import streamlit as st
-import requests
-from streamlit_lottie import st_lottie
-from PIL import Image
+import pandas as pd
+import plotly.express as px
+from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Wireless Frequency Monitor", page_icon=":vibration_mode:", layout="wide")
+# Function to fetch data with caching
+@st.cache_data(ttl=600)  # Cache for 10 minutes
+def fetch_data(connection_name, url):
+    conn = st.connection(connection_name, type=GSheetsConnection)
+    data = conn.read(spreadsheet=url)
+    return data
 
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-local_css("style/style.css")
+hide_st_style =  """
+                    <style>
+                    #MainMenu {visibility : hidden}
+                    footer {visibility : hidden}
+                    header {visibility : hidden}
+                    </style>
+            """
 
-def load_lottie_url(url):
-    r = requests.get(url)
-    if r.status_code != 200:
+st.markdown (hide_st_style, unsafe_allow_html=True)
+
+
+# Google Spreadsheet URL and connection name
+url = "https://docs.google.com/spreadsheets/d/1Z4GDst-_he_Et8iUt2LNTbB9VWKCXmB4cblRfk4UdZE/edit?gid=0#gid=0"
+connection_name = "my_gsheets_connection"
+
+# Fetch data
+data = fetch_data(connection_name, url)
+
+# Convert 'Date' column to datetime and extract only the date part
+data['Date'] = pd.to_datetime(data['Date'], errors='coerce').dt.date
+
+# Remove rows where 'Date' is missing or invalid
+data = data.dropna(subset=['Date'])
+
+# Convert 'Temperature(°C)' and 'Humidity(%)' to numeric
+data['Temperature(°C)'] = pd.to_numeric(data['Temperature(°C)'], errors='coerce')
+data['Humidity(%)'] = pd.to_numeric(data['Humidity(%)'], errors='coerce')
+
+st.title("Temperature and Humidity Monitoring for Sri Lankan Airlines Engineering Stores")
+
+left_column, right_column = st.columns(2)
+
+# Function to get the latest data for a store by finding the largest row number
+def get_latest_data(data, store):
+    store_data = data[data['Store'] == store]
+    if store_data.empty:
         return None
-    return r.json()
+    latest_data = store_data.tail(1)
+    return latest_data
 
-Lottie1 = load_lottie_url("https://lottie.host/f7f9b5f6-e9d8-4b72-8d80-90a6e857788a/cEgUDUjXxB.json")#Purple
-Lottie2 = load_lottie_url("https://lottie.host/737052d4-6263-46ac-a0d8-bc11c53839ce/5zvEr3VVx1.json")#Thin
-Lottie3 = load_lottie_url("https://lottie.host/5bd0537f-12d4-4619-a9af-b5847e26335a/MWYK7Nh17P.json")#Yellow
-Lottie4 = load_lottie_url("https://lottie.host/17c74452-f12e-4780-9b8b-33d8cea05dd2/Y8gXYgLOXg.json")#big wave
-Lottie5 = load_lottie_url("https://lottie.host/b22ff990-1979-4045-a9ca-5d497018607c/6IVsWVYQyt.json")#Switch on Blt
-Lottie6 = load_lottie_url("https://lottie.host/cc535049-e2da-4957-ae6c-dfaf1514e15b/oshJli4JW8.json")#Blt Device
-Lottie7 = load_lottie_url("https://lottie.host/dfdc9966-fc1f-4cbe-a41a-82641a5f14b2/wfZxuqSaKs.json")#Multiple Fx
-Lottie8 = load_lottie_url("https://lottie.host/55e7d8bd-7fd9-49de-94c6-42711b7ea19b/5Ps5QIdaXW.json")#Blt logo
-lottie9 = load_lottie_url("https://lottie.host/3a8cf170-72cd-48a1-b649-98ef38c28757/fALgLT26Ms.json")#Engineers
-lottie10 = load_lottie_url("https://lottie.host/435f6294-4ad0-4f30-922b-59507615507e/sgc5QvZHcd.json")#Safety
-lottie11 = load_lottie_url("https://lottie.host/a722fbce-9063-4aa9-9212-7ddeb9962d0a/FGtnJP3vMi.json")#Space
-img1 = Image.open("images/photo_2024-04-16_15-48-28.jpg")  # pic
-img2 = Image.open("images/photo_2024-04-16_15-45-14.jpg")  # ios
-img3 = Image.open("images/photo_2024-04-16_15-45-16.jpg")  # ios
-img4 = Image.open("images/photo_2024-04-16_15-45-19.jpg")  # andr
-img5 = Image.open("images/image_2024-04-16_15-46-38.png")  # diag
+# Function to display live data with warnings
+def display_live_data(latest_data):
+    if latest_data is None or latest_data.empty:
+        st.warning("No data available.")
+        return
+    
+    temperature = latest_data['Temperature(°C)'].values[0]
+    humidity = latest_data['Humidity(%)'].values[0]
+    
+    if pd.isna(temperature) or pd.isna(humidity):
+        st.error("Error: Invalid data encountered.")
+        return
+    
+    st.metric(label="Temperature (°C)", value=f"{temperature:.2f}")
+    st.metric(label="Humidity (%)", value=f"{humidity:.2f}")
+    
+    if temperature > 25 or temperature < 18:
+        st.warning(f"Temperature is out of range! Current Temperature: {temperature:.2f}°C")
+    elif abs(temperature - 25) < 2 or abs(temperature - 18) < 2:
+        st.warning(f"Temperature is near threshold! Current Temperature: {temperature:.2f}°C")
+    
+    if humidity > 75 or humidity < 55:
+        st.warning(f"Humidity is out of range! Current Humidity: {humidity:.2f}%")
+    elif abs(humidity - 75) < 5 or abs(humidity - 55) < 5:
+        st.warning(f"Humidity is near threshold! Current Humidity: {humidity:.2f}%")
 
-# header
-st.title("Wireless Frequency Monitor")
-st.subheader("Project For Module 5FTC - 1439 Project Management and Product Development, Project based on Arduino and Bluetooth Low Energy Edition for Frequency Monitoring and Wireless Communication")
-left_column, right_column = st.columns(2)
+# Function to create temperature and humidity graphs with thresholds
+def create_graphs(store_data, store_name):
+    if store_data.empty:
+        st.warning(f"No data available for {store_name}.")
+        return
+
+    fig_temp = px.line(store_data, x='Time', y='Temperature(°C)', title=f'Temperature Over Time - {store_name}', labels={'Temperature(°C)': 'Temperature (°C)'})
+    fig_temp.add_hline(y=18, line_dash="dash", line_color="red", annotation_text="Low Threshold (18°C)")
+    fig_temp.add_hline(y=25, line_dash="dash", line_color="red", annotation_text="High Threshold (25°C)")
+    st.plotly_chart(fig_temp, use_container_width=True)
+
+    fig_hum = px.line(store_data, x='Time', y='Humidity(%)', title=f'Humidity Over Time - {store_name}', labels={'Humidity(%)': 'Humidity (%)'})
+    fig_hum.add_hline(y=55, line_dash="dash", line_color="blue", annotation_text="Low Threshold (55%)")
+    fig_hum.add_hline(y=75, line_dash="dash", line_color="blue", annotation_text="High Threshold (75%)")
+    st.plotly_chart(fig_hum, use_container_width=True)
+
 with left_column:
-    st.write("##")
-    st.write("Project Members")
-    st.write("##")
-    st.write("Project Manager  : Linuk Perera")
-    st.write("Project Analyst  : Neleesha Nulundeniya")
-    st.write("Project Planner  : Induwara Weerasekara")
-    st.write("Project Marketer : Mihijaya Kumarasiri")
+    st.subheader("Store 1")
+    store1_latest = get_latest_data(data, 'Store 1')
+    display_live_data(store1_latest)
+    
+    with st.expander("Show Graphs"):
+        store1_data = data[data['Store'] == 'Store 1']
+        create_graphs(store1_data, 'Store 1')
+
 with right_column:
-    st_lottie(load_lottie_url("https://lottie.host/5bd0537f-12d4-4619-a9af-b5847e26335a/MWYK7Nh17P.json"), height = 300, key = "Lottie3")
+    st.subheader("Store 2")
+    store2_latest = get_latest_data(data, 'Store 2')
+    display_live_data(store2_latest)
+    
+    with st.expander("Show Graphs"):
+        store2_data = data[data['Store'] == 'Store 2']
+        create_graphs(store2_data, 'Store 2')
 
-
-#User Manual
-st.write("---")
-st.header("How To Use the Wireless Frequency Monitor")
 st.write("##")
-st.write("A step by step guid to use our system")
-left_column, right_column = st.columns(2)
+
 with left_column:
-    st.write("##")
-    st.write("Follow 3 Easy steps to Measure Frequency of Any Voltage Source")
-    st.write("Prerequisites Include")
-    st.write("1 An Android or IOS Device that Supports Bluetooth")
-    st.write("2 Installation od the DSD Bluetooth Application")
+    st.subheader("Store 3")
+    store3_latest = get_latest_data(data, 'Store 3')
+    display_live_data(store3_latest)
+    
+    with st.expander("Show Graphs"):
+        store3_data = data[data['Store'] == 'Store 3']
+        create_graphs(store3_data, 'Store 3')
 
 with right_column:
-    st_lottie(load_lottie_url("https://lottie.host/f7f9b5f6-e9d8-4b72-8d80-90a6e857788a/cEgUDUjXxB.json"), height = 200, key = "coding")
-
+    st.subheader("Store 4")
+    store4_latest = get_latest_data(data, 'Store 4')
+    display_live_data(store4_latest)
+    
+    with st.expander("Show Graphs"):
+        store4_data = data[data['Store'] == 'Store 4']
+        create_graphs(store4_data, 'Store 4')
 
 st.write("##")
-st.subheader("Step 1 - Switch on Bluetooth in Your Android or IOS Device")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/b22ff990-1979-4045-a9ca-5d497018607c/6IVsWVYQyt.json"), height = 300, key = "Lottie5")
-st.subheader("Step 2 - Connect Your Device to the HM - 10 Through the DSD App")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/cc535049-e2da-4957-ae6c-dfaf1514e15b/oshJli4JW8.json"), height = 300, key = "Lottie6")
-st.subheader("Step 3 - Observe Frequency Data Through Your Mobile Device")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/dfdc9966-fc1f-4cbe-a41a-82641a5f14b2/wfZxuqSaKs.json"), height = 300, key = "Lottie7")
 
-
-
-
-
-
-#Mission
-st.write("---")
-st.header("Our Mission")
-st.subheader("To Create A Safe Working Environment")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/435f6294-4ad0-4f30-922b-59507615507e/sgc5QvZHcd.json"), height = 300, key = "Lottie9")
-st.subheader("To Create A Reliable Yet Affordable Product")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/3a8cf170-72cd-48a1-b649-98ef38c28757/fALgLT26Ms.json"), height = 300, key = "Lottie10")
-st.subheader("To Provide Wide Functionality Through our Product")
-st.write("##")
-st_lottie(load_lottie_url("https://lottie.host/a722fbce-9063-4aa9-9212-7ddeb9962d0a/FGtnJP3vMi.json"), height = 300, key = "Lottie11")
-
-
-
-
-
-#Physical Implementation
-st.write("---")
-st.header("Physical Implementation")
-st.subheader("This is an Overview of the Actual Project and its Circuitry")
-st.write("")
-image_column, text_column = st.columns((2, 1))
-with image_column:
-    st.image(img1)
-with text_column:
-    st.write("Project For 5FTC - 1439 Project Management abd Product Development, Project based on Arduino and Bluetooth Low Energy Edition")
-    st.write("##")
-    st.write("Refer Project Physical Implementation")
-
-
-
-
-
-#Project Outputs
-st.write("---")
-st.header("Project Outputs")
-st.subheader("IOS Output Interface")
-st.subheader("Request For Standard Deviation")
-
-left_column, right_column = st.columns(2)
 with left_column:
-    st.image(img2)
-    st.subheader("Request For Frequency")
-    st.image(img3)
-with right_column:
-    st.write("View of system User Interface")
-    st.write("IOS Output Interface can be seen to the Left, Request For Standard Deviation is prompt with the input of 'Sd 'and Request For Frequency is Promp from the input of 'F'")
-    st.write("Bluetooth Low Energy (BLE) mode is revolutionizing telecommunications applications for mobile devices engineered for engineers. Its low power consumption and short-range communication capabilities make it an ideal choice for connecting engineering tools and equipment wirelessly. Whether it's transmitting data from sensors in industrial machinery or enabling real-time communication between handheld devices and control systems, BLE facilitates seamless connectivity while conserving battery life. Engineers can leverage BLE to create efficient and reliable solutions for monitoring, control, and data acquisition in various industries, including manufacturing, automotive, and healthcare. With BLE, engineers can develop mobile applications that offer unparalleled flexibility and convenience, empowering users to interact with their equipment and systems in innovative ways.")
-    st.write("1. Low Power Consumption: BLE is optimized for low power consumption, making it ideal for battery-operated devices. It achieves this by reducing the duty cycle and maintaining short connection intervals, allowing devices to operate for months or even years on a single coin cell battery.")
-    st.write("2. Short Range Communication: Similar to traditional Bluetooth, BLE operates in the 2.4 GHz ISM band but with a shorter range, typically up to 100 meters. This short-range communication is suitable for applications where devices need to communicate within a localized area, such as wearables, sensors, and smart home devices.")
-    st.write("3. Fast Connection and Data Transfer: BLE devices can establish connections quickly and transfer small amounts of data efficiently. This makes it suitable for applications that require periodic data exchange, such as health and fitness trackers, smart watches, and proximity sensors.")
-    st.write("4. Advertising and Scanning: BLE devices can operate in advertising or scanning modes. Advertising mode allows devices to broadcast data packets, while scanning mode enables other devices to discover and connect to nearby BLE devices. This enables efficient discovery and communication between devices in a BLE network.")
-    st.write("5. Peripheral and Central Roles: In a BLE network, devices can operate in peripheral or central roles. Peripheral devices typically broadcast data and respond to requests from central devices, while central devices scan for nearby peripherals and initiate connections. This flexible architecture allows for various device configurations and communication patterns.")
-    st.write("6. Security: BLE incorporates security features such as encryption and authentication to protect data transmission between devices. This ensures data privacy and integrity, making BLE suitable for applications that handle sensitive information, such as medical devices and industrial sensors.")
-    st.write("7. Interoperability: BLE is a standardized technology maintained by the Bluetooth Special Interest Group (SIG), ensuring interoperability between different devices and manufacturers. This standardization allows developers to create BLE-enabled products and applications that can communicate seamlessly with other BLE devices")
+    st.subheader("Store 5")
+    store5_latest = get_latest_data(data, 'Store 5')
+    display_live_data(store5_latest)
+    
+    with st.expander("Show Graphs"):
+        store5_data = data[data['Store'] == 'Store 5']
+        create_graphs(store5_data, 'Store 5')
 
-st.subheader("Android Output Interface")
-left_column, right_column = st.columns(2)
+with right_column:
+    st.subheader("Store 6")
+    store6_latest = get_latest_data(data, 'Store 6')
+    display_live_data(store6_latest)
+    
+    with st.expander("Show Graphs"):
+        store6_data = data[data['Store'] == 'Store 6']
+        create_graphs(store6_data, 'Store 6')
+st.write("##")
+
+
+
 with left_column:
-    st.image(img4)
+    st.subheader("Store 7")
+    store5_latest = get_latest_data(data, 'Store 7')
+    display_live_data(store5_latest)
+    
+    with st.expander("Show Graphs"):
+        store5_data = data[data['Store'] == 'Store 7']
+        create_graphs(store5_data, 'Store 7')
+
 with right_column:
-    st.write("Functions Being Called for on the Android Interface Can be seen on the Left")
+    st.subheader("Store 8")
+    store6_latest = get_latest_data(data, 'Store 8')
+    display_live_data(store6_latest)
+    
+    with st.expander("Show Graphs"):
+        store6_data = data[data['Store'] == 'Store 8']
+        create_graphs(store6_data, 'Store 8')
 
 
+# Search and download functionality
+st.subheader("Search and Download Data")
+
+# Multiselect for stores
+stores = data['Store'].unique().tolist()
+selected_stores = st.multiselect("Select store(s)", stores, default=stores)
+
+# Ensure min_date and max_date are valid datetime.date objects
+min_date = data['Date'].min()
+max_date = data['Date'].max()
+
+# Date range input for date range
+start_date, end_date = st.date_input("Select date range", [min_date, max_date], min_value=min_date, max_value=max_date)
+
+# Filter data based on selected stores and date range
+filtered_data = data[(data['Store'].isin(selected_stores)) & (data['Date'] >= start_date) & (data['Date'] <= end_date)]
+st.dataframe(filtered_data)
+
+if st.button('Download Searched Data as CSV'):
+    csv = filtered_data.to_csv(index=False).encode('utf-8')
+    st.download_button(label="Download CSV", data=csv, file_name='searched_data.csv', mime='text/csv')
 
 
-#Diagram
-st.write("---")
-st.header("System Diagram")
-st.subheader("The Circuit Diagram of The Implemented System")
+def reload_page():
+    js = "window.location.reload();"
+    st.write(f'<script>{js}</script>', unsafe_allow_html=True)
 
-left_column, right_column = st.columns(2)
-with left_column:
-    st.image(img5)
-with right_column:
-    st.write("The circuitry is basically a Programmed Arduino Uno board Connected to a HM - 10 Bluetooth Module")
-    st_lottie(load_lottie_url("https://lottie.host/55e7d8bd-7fd9-49de-94c6-42711b7ea19b/5Ps5QIdaXW.json"), height = 150, key = "Lottie8")
-    st.write("Bluetooth Low Energy was used due to its high energy Efficiency and Compatibility")
-    st.write("Wiring choices are Intentional, to give a maximum output from the implemented system")
-
-
-
-
-#Submission Portal
-st.write("---")
-st.header("To contact the development team use the below Submission Portal")
-st.write("Fill all 3 boxes")
-form = """<form action="https://formsubmit.co/linukperera402@gmail.com" method="POST">
-    <input type = "hidden" name="_captcha" value="false">
-     <input type="text" name="name" placeholder = "Your Name" required>
-     <input type="email" name="email" placeholder = "Your Email" required>
-     <textarea name = "message" placeholder= "Your Message Here" required></textarea>
-     <button type="submit">Send</button>
-</form>"""
-left_column, right_column = st.columns(2)
-with left_column:
-    st.markdown(form, unsafe_allow_html=True)
-with right_column:
-    st_lottie(load_lottie_url("https://lottie.host/737052d4-6263-46ac-a0d8-bc11c53839ce/5zvEr3VVx1.json"), height = 300, key = "Lottie2")
-
-st_lottie(load_lottie_url("https://lottie.host/17c74452-f12e-4780-9b8b-33d8cea05dd2/Y8gXYgLOXg.json"), height = 300, key = "Lottie4")
+# Example button to trigger the reload
+#if st.button('Reload Page'):
+    
+    
+    # Button to clear cache and refresh data
+if st.button('Refresh Data'):
+    fetch_data.clear()
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    reload_page()
+    st.rerun()
